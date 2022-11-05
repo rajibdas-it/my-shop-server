@@ -27,10 +27,17 @@ async function run() {
     const orderCollection = client.db("myShop").collection("orders");
 
     app.get("/products", async (req, res) => {
-      const query = {};
+      const page = parseInt(req.query.page);
+      const size = parseInt(req.query.size);
+      console.log(page, size);
+      // const query = {};
       const cursor = productCollection.find(query);
-      const result = await cursor.toArray();
-      res.send(result);
+      const products = await cursor
+        .skip(page * size)
+        .limit(size)
+        .toArray();
+      const count = await productCollection.estimatedDocumentCount();
+      res.send({ count, products });
     });
 
     app.get("/product/:id", async (req, res) => {
@@ -55,6 +62,26 @@ async function run() {
       }
       const cursor = orderCollection.find(query);
       const result = await cursor.toArray();
+      res.send(result);
+    });
+    app.delete("/orders/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: ObjectId(id) };
+      const result = await orderCollection.deleteOne(query);
+      res.send(result);
+    });
+
+    app.patch("/orders/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: ObjectId(id) };
+      const updatedReq = req.body;
+      // console.log(updatedReq.status);
+      const updatedOrder = {
+        $set: {
+          status: updatedReq.status,
+        },
+      };
+      const result = await orderCollection.updateOne(query, updatedOrder);
       res.send(result);
     });
   } finally {
