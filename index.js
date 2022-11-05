@@ -5,6 +5,7 @@ const app = express();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
 require("colors");
+const jwt = require("jsonwebtoken");
 
 app.use(cors());
 app.use(express.json());
@@ -21,16 +22,41 @@ const client = new MongoClient(uri, {
   serverApi: ServerApiVersion.v1,
 });
 
+function verifyJWT(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    res.status(403).send({ message: "unauthorize access" });
+  }
+  const token = authHeader.split(" ")[1];
+  console.log(token);
+  jwt.verify(token, process.env.SECRET_TOKEN, (err, decoded) => {
+    if (err) {
+      res.status(403).send({ message: "unauthorize access" });
+    }
+    req.decoded = decoded;
+    next();
+  });
+}
+
 async function run() {
   try {
     const productCollection = client.db("myShop").collection("product");
     const orderCollection = client.db("myShop").collection("orders");
 
+    app.post("/jwt", (req, res) => {
+      const user = req.body;
+      // console.log(user);
+      const token = jwt.sign(user, process.env.SECRET_TOKEN, {
+        expiresIn: "5h",
+      });
+      res.send({ token });
+    });
+
     app.get("/products", async (req, res) => {
       const page = parseInt(req.query.page);
       const size = parseInt(req.query.size);
-      console.log(page, size);
-      // const query = {};
+      // console.log(page, size);
+      const query = {};
       const cursor = productCollection.find(query);
       const products = await cursor
         .skip(page * size)
@@ -46,14 +72,10 @@ async function run() {
       const result = await productCollection.findOne(query);
       res.send(result);
     });
-
-    app.post("/orders", async (req, res) => {
-      const order = req.body;
-      const result = await orderCollection.insertOne(order);
-      res.send(result);
-    });
-    app.get("/orders", async (req, res) => {
+    app.get("/orders", verifyJWT, async (req, res) => {
       // const query = { email: req.query.email };
+
+      // console.log(req.headers.authorization.split[1]);
       let query = {};
       if (req.query.email) {
         query = {
@@ -64,6 +86,13 @@ async function run() {
       const result = await cursor.toArray();
       res.send(result);
     });
+
+    app.post("/orders", async (req, res) => {
+      const order = req.body;
+      const result = await orderCollection.insertOne(order);
+      res.send(result);
+    });
+
     app.delete("/orders/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: ObjectId(id) };
